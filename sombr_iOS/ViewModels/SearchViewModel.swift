@@ -31,6 +31,8 @@ final class SearchViewModel: ObservableObject {
                 let found = try await MetadataService.search(query: q)
                 guard !Task.isCancelled else { return }
                 results = found
+                let visibleIDs = Set(found.map(\.id))
+                jobs = jobs.filter { visibleIDs.contains($0.key) || $0.value.status.isActive }
                 // Pre-create idle jobs for each result
                 for r in found where jobs[r.id] == nil {
                     jobs[r.id] = DownloadJob(result: r)

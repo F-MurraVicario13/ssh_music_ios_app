@@ -30,6 +30,8 @@ final class DownloadJob: ObservableObject, Identifiable {
     @Published var status: DownloadStatus = .idle
     @Published var log: String = ""
 
+    private let maxLogCharacters = 20_000
+
     init(result: SearchResult) {
         self.id = UUID()
         self.result = result
@@ -37,5 +39,8 @@ final class DownloadJob: ObservableObject, Identifiable {
 
     func appendLog(_ text: String) {
         log += text
+        if log.count > maxLogCharacters {
+            log = String(log.suffix(maxLogCharacters))
+        }
     }
 }
