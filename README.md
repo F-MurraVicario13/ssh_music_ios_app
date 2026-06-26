@@ -91,10 +91,10 @@ Citadel is a modern async/await SSH client for Swift, built on SwiftNIO.
 4. Click **Add Package** and tick the `Citadel` library product for the `sombr_iOS` target
 
 > **Note on Citadel version**: The `SSHManager.swift` code uses:
-> - `SSHClient.connect(host:port:authenticationMethod:hostKeyValidator:)`
+> - `SSHClient.connect(host:port:authenticationMethod:hostKeyValidator:reconnect:)`
 > - `client.executeCommand(_:)` returning `ByteBuffer`
-> - `client.executeCommandStream(_:)` returning a stream with `.stdout` / `.stderr`
-> - `NIOSSHPrivateKey(openSSHPrivateKey:)` — provided by Citadel for OpenSSH PEM parsing
+> - `client.executeCommandStream(_:)` returning `ExecCommandOutput` values with `.stdout` / `.stderr`
+> - OpenSSH private key parsing via `Curve25519.Signing.PrivateKey(sshEd25519:)` or `Insecure.RSA.PrivateKey(sshRsa:)`
 >
 > If a newer Citadel release renames these, check their [CHANGELOG](https://github.com/orlandos-nl/Citadel).
 
@@ -129,9 +129,8 @@ With a free account the app re-signs every 7 days. Re-run from Xcode to refresh.
 | Username | your Linux username on the Chromebook |
 | Auth | **Private Key** (preferred) or password |
 
-For a private key: paste the full contents of `~/.ssh/id_ed25519` (or whichever key
-you have configured for SSH login). Ed25519 and ECDSA P-256 keys work; RSA may require
-a newer Citadel release.
+For a private key: paste the full contents of `~/.ssh/id_ed25519` or an RSA OpenSSH
+private key. This build of Citadel supports those formats directly.
 
 Tap **Test Connection** — it runs `which somedl` over SSH and reports success or an
 error message.

@@ -2,6 +2,7 @@ import Foundation
 import Citadel
 import NIOSSH
 import NIOCore
+import Crypto
 
 // MARK: - Error types
 
@@ -76,7 +77,8 @@ actor SSHManager {
                 authenticationMethod: authMethod,
                 // acceptAnything is fine for a personal device on a home network.
                 // For stricter security implement TOFU fingerprint pinning here.
-                hostKeyValidator: .acceptAnything()
+                hostKeyValidator: .acceptAnything(),
+                reconnect: .never
             )
             client = newClient
             currentConfig = config
@@ -95,10 +97,21 @@ actor SSHManager {
         case .password(let pw):
             return .passwordBased(username: config.username, password: pw)
         case .privateKey(let pem):
-            // NIOSSHPrivateKey(openSSHPrivateKey:) is provided by Citadel and handles
-            // Ed25519 and ECDSA keys in OpenSSH format (-----BEGIN OPENSSH PRIVATE KEY-----)
-            let privateKey = try NIOSSHPrivateKey(openSSHPrivateKey: pem)
-            return .privateKeyBased(username: config.username, privateKey: privateKey)
+            guard let data = pem.data(using: .utf8) else {
+                throw SSHManagerError.unknown("Private key is not valid UTF-8.")
+            }
+
+            if let privateKey = try? Curve25519.Signing.PrivateKey(sshEd25519: data) {
+                return .ed25519(username: config.username, privateKey: privateKey)
+            }
+
+            if let privateKey = try? Insecure.RSA.PrivateKey(sshRsa: data) {
+                return .rsa(username: config.username, privateKey: privateKey)
+            }
+
+            throw SSHManagerError.unknown(
+                "Unsupported private key format. Use an OpenSSH Ed25519 or RSA key."
+            )
         }
     }
 
@@ -142,22 +155,11 @@ actor SSHManager {
                     let command = buildSomeDLCommand(query)
 
                     let execStream = try await ssh.executeCommandStream(command)
-
-                    // Concurrently drain stdout and stderr so neither blocks the other.
-                    try await withThrowingTaskGroup(of: Void.self) { group in
-                        group.addTask {
-                            for try await chunk in execStream.stdout {
-                                let text = String(buffer: chunk)
-                                continuation.yield(text)
-                            }
+                    for try await output in execStream {
+                        switch output {
+                        case .stdout(let chunk), .stderr(let chunk):
+                            continuation.yield(String(buffer: chunk))
                         }
-                        group.addTask {
-                            for try await chunk in execStream.stderr {
-                                let text = String(buffer: chunk)
-                                continuation.yield(text)
-                            }
-                        }
-                        try await group.waitForAll()
                     }
 
                     continuation.finish()
